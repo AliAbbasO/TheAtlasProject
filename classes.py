@@ -2,7 +2,6 @@ from datetime import datetime
 import config
 from polygon import RESTClient
 from alert_formatting import generate_html, two_decimal
-import os
 import openai
 
 client = RESTClient(config.polygon_key)
@@ -62,7 +61,7 @@ class Company:
             ('data', 'Float', flt),
             ('data', 'Price', two_decimal(self.price, prepend='$')),
             ('data', 'Volume', two_decimal(self.volume, commas=True, decimals=0)),
-            ('data', 'Amount Change', two_decimal(self.amount_chg, prepend='+')),
+            ('data', 'Dollar Change', two_decimal(self.amount_chg, prepend='+')),
             ('data', 'Percent Change', two_decimal(self.percent_chg, prepend='+', append='%'))
         ]
 
@@ -103,10 +102,28 @@ class Alert:
 
     def generate_summary_category(self):
 
-        # For now we are just asking GPT3 Davinci to summarize this article, no fine tuning and no special prompts
+        # For now we are just asking gpt-3.5-turbo Davinci to summarize this article, no fine tuning and no special prompts
+        #? Try to get it to stop saying "This press release blah blah" and just be more direct
 
+        completion = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are given press releases and you must respond with a category from this list (Drug Approval, Drug Rejection, Merger/Acquisition, Earnings, N/A) and a summary of the press release that is somewhat short but contains market related info"},  # somewhat short - market related info -
+                {"role": "system", "content": "The first line of your response should be just the category and the second line should be just the summary"},
+                {"role": "user", "content": self.article.headline + '\n' + self.article.body}
+            ],
+            temperature=0.3
+        )
 
-        pass
+        response_str = completion['choices'][0]['message']['content']
+        response_list = response_str.split('\n')
+
+        self.category = response_list[0]
+        self.summary = response_list[1] if response_list[1] else response_list[2]
+
+        # print(self.category)
+        # print(self.summary)
+        # print()
 
     def generate_email_alert(self):
         alert_lines = [
@@ -134,22 +151,3 @@ class Alert:
 
     def record(self):
         pass
-
-
-# stock = Company('AAPL')
-# print(stock.last_close)
-# stock.update_financials()
-# print(stock.last_close)
-
-article = Article({})
-article.headline = "Apple Releases Quarterly Earnings"
-article.tickers = ['AAPL']
-article.created = datetime.now()
-
-alert = Alert(article)
-alert.load_companies()
-print(alert.companies[0].__dict__)
-
-alert.generate_email_alert()
-
-alert.deliver()
