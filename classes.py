@@ -3,6 +3,7 @@ import config
 from polygon import RESTClient
 from alert_formatting import generate_html, two_decimal
 import openai
+from telegram_bot import telegram_message_to_groups
 
 client = RESTClient(config.polygon_key)
 openai.api_key = config.openai_key
@@ -58,7 +59,7 @@ class Company:
             ('data', 'Company Name', self.name),
             ('data', 'Ticker', self.ticker),
             ('data', 'Market Cap', two_decimal(self.mkt_cap, decimals=0, commas=True, prepend='$', append='M', factor=1 / 1_000_000)),
-            ('data', 'Float', flt),
+            # ('data', 'Float', flt),
             ('data', 'Price', two_decimal(self.price, prepend='$')),
             ('data', 'Volume', two_decimal(self.volume, commas=True, decimals=0)),
             ('data', 'Dollar Change', two_decimal(self.amount_chg, prepend='+')),
@@ -68,6 +69,16 @@ class Company:
         #? Add red and green colouring for positive/negative change
 
         return alert_lines
+
+    def generate_telegram_alert_text(self):
+        return f"""
+<b>${self.ticker}</b> - {self.name}
+<b>Market Cap:</b> {two_decimal(self.mkt_cap, decimals=0, commas=True, prepend='$', append='M', factor=1 / 1_000_000)}
+<b>Price:</b> {two_decimal(self.price, prepend='$')}
+<b>Volume:</b> {two_decimal(self.volume, commas=True, decimals=0)}
+<b>Dollar Change:</b> {two_decimal(self.amount_chg, prepend='+')}
+<b>Percent Change:</b> {two_decimal(self.percent_chg, prepend='+', append='%')}
+"""
 
 
 class Article:
@@ -87,6 +98,7 @@ class Alert:
         self.summary = ""
         self.category = ""
         self.html_alert = ""
+        self.telegram_alert = ""
         # self.recipients
 
     def load_companies(self):
@@ -108,7 +120,7 @@ class Alert:
         completion = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are given press releases and you must respond with a category from this list (Drug Approval, Drug Rejection, Merger/Acquisition, Earnings, N/A) and a summary of the press release that is somewhat short but contains market related info"},  # somewhat short - market related info -
+                {"role": "system", "content": "You are given press releases and you must respond with a category from this list (Drug Approval, Drug Rejection, Clinical Trial, Merger/Acquisition, Earnings, N/A) and a summary of the press release that is somewhat short but contains market related info"},  # clues for GPT: "somewhat short" - "market related info" -
                 {"role": "system", "content": "The first line of your response should be just the category and the second line should be just the summary"},
                 {"role": "user", "content": self.article.headline + '\n' + self.article.body}
             ],
@@ -118,14 +130,14 @@ class Alert:
         response_str = completion['choices'][0]['message']['content']
         response_list = response_str.split('\n')
 
-        self.category = response_list[0]
-        self.summary = response_list[1] if response_list[1] else response_list[2]
+        self.category = response_list[0].strip()
+        self.summary = response_list[1].strip() if response_list[1] else response_list[2].strip()
 
         # print(self.category)
         # print(self.summary)
         # print()
 
-    def generate_email_alert(self):
+    def generate_alert_text(self):
         alert_lines = [
             ('title', self.article.headline, 'small'),
             ('data', 'Category', self.category),
@@ -145,9 +157,31 @@ class Alert:
 
         self.html_alert = generate_html(alert_lines)
 
-    def deliver(self):
+        self.telegram_alert = \
+f"""<b>❗{self.category}❗</b>
+{self.article.headline}
+
+<u><b>Public Companies Involved:</b></u>
+"""
+
+        for company in self.companies:
+            self.telegram_alert += company.generate_telegram_alert_text()
+
+        self.telegram_alert += f"""
+<b>Summary:</b>
+{self.summary}
+
+<a href='{self.article.url}'><b>READ MORE</b></a>"""
+
+    def deliver(self, tg_channels):
         assert self.html_alert != ""
-        print(self.html_alert)
+        assert self.telegram_alert != ""
+
+        # print(self.html_alert)
+        # print()
+        print(self.telegram_alert)
+
+        telegram_message_to_groups(self.telegram_alert, tg_channels)
 
     def record(self):
         pass
