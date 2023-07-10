@@ -166,9 +166,15 @@ def generate_html(lines: list):
 
     return alert
 
-def two_decimal(number, decimals=2, commas=False, prepend='', append='', factor=1):
+
+def two_decimal(number, decimals=2, commas=False, prepend='', append='', factor=1, non_zero=False):
     """Returns number in string format with 2 decimal points and with prepend and append
-    - If a non-number is inputted, return the input"""
+    - If a non-number is inputted, return the input
+    - If number=0 and non_zero=True, this function returns "N/A"
+    """
+    if non_zero and number == 0:
+        return "N/A"
+
     try:
         number = float(number) * factor
     except:

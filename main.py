@@ -34,6 +34,9 @@ def main():
     for story in stories:
         if story['id'] not in completed_articles:
             completed_articles.append(story['id'])
+
+            # Thread for each article
+            #? Can we send telegram messages from two different threads at the same time?
             process_story(story)
         else:
             print(f"ARTICLE SEEN AGAIN. ID: {story['id']}")
@@ -73,12 +76,12 @@ def process_story(story):
 
     alert = Alert(article)
 
-    # Determine channels to send to
+    # Send to production channels if alert category is in the list of prod alerts, else just send to dev channels
     telegram_channels = []
-    if alert.category == 'N/A':
-        telegram_channels = config.telegram_channels_dev
-    else:
+    if alert.category in ('Drug Approval', 'Drug Rejection', 'Clinical Trial', 'Merger/Acquisition', 'Stock Split'):
         telegram_channels = config.telegram_channels_prod
+    else:
+        telegram_channels = config.telegram_channels_dev
 
     alert.deliver(telegram_channels)
 
