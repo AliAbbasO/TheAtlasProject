@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, time
 from traceback import print_exc
 from constants import *
+from text_processing import *
 from alert_formatting import generate_html, two_decimal
 import openai
 from telegram_bot import telegram_message_to_groups
@@ -11,20 +12,25 @@ openai.api_key = config.openai_key
 
 class Company:
     def __init__(self, ticker):
+        # Company data
         self.ticker = ticker
         self.name = ""
         self.exchange = ""
+        self.cik = ""
+
+        self.get_company_data()  # Populate company data attributes
+
+        # Financials
+        self.weighted_shares_outstanding = 0.0    # This is the number that you can multiply by price to get mkt_cap
         self.mkt_cap = 0.0
-        self.flt = 0
+        # self.flt = 0
         self.price = 0.0
         self.volume = 0
         self.amount_chg = 0.0
         self.percent_chg = 0.0
         self.last_close = 0.0
 
-        self.get_name()    # Populate name attribute
-
-    def get_name(self):
+    def get_company_data(self):
         """Get stock name from ticker, using the STOCK_LIST
         :return:
         """
@@ -32,39 +38,55 @@ class Company:
 
         self.name = stock['name']
         self.exchange = stock['primary_exchange']
+        self.cik = stock['cik']
+
+        #? Remove "common stock" or "ordinary shares" or "New Common Stock (Canada)" or "Class A Common Stock" or "Class A Common" from end of self.name if it's there
 
     def update_financials(self):
         """Get all company financial data from polygon and update the object
         :return: None
         """
 
+        # Get all the stock details
         snapshot = POLYGON_STOCKS_CLIENT.get_snapshot(self.ticker)['ticker']
         snapshot_today = snapshot['day']
         snapshot_yesterday = snapshot['prevDay']
 
+        # On market day mornings, today's close is 0 because trading hasn't started yet
+        # In this case we should use the previous day's close as the current price, and have change values equal zero
+        #? If the price is 0 because of a polygon error, and it is before 9:30AM on a weekend, this logic would trigger, but it shouldn't
+        if snapshot_today['c'] == 0 and datetime.now().time() < time(9, 30):
+            snapshot_today = snapshot_yesterday
+
         # Don't use 'todaysChange' or 'todaysChangePerc' since they include pre/post market changes
 
-        self.mkt_cap = 0
-        self.flt = 0
-        self.price = snapshot_today['c']
-        self.volume = snapshot_today['v']
-        self.amount_chg = snapshot_today['c'] - snapshot_yesterday['c']
-        self.percent_chg = snapshot_today['c']/snapshot_yesterday['c'] - 1
-        self.last_close = snapshot_yesterday['c']
+        # If polygon's yesterday data is bad, set everything to 0 (price will be displayed as N/A on the alert)
+        if snapshot_yesterday['c'] == 0 or snapshot_today['c'] == 0:
 
-        #? For market cap, polygon says they use weighted shares outstanding multiplied by last close, what is weighted shares outstanding?? is it an issue if I use regular shares outstanding?
+            self.price = 0
+            self.volume = 0
+            self.amount_chg = 0
+            self.percent_chg = 0
+            self.last_close = 0
+
+        else:
+
+            self.price = snapshot_today['c']
+            self.volume = snapshot_today['v']
+            self.amount_chg = snapshot_today['c'] - snapshot_yesterday['c']
+            self.percent_chg = snapshot_today['c']/snapshot_yesterday['c'] - 1
+            self.last_close = snapshot_yesterday['c']    #? On market day mornings this will be equal to the current price
+
+        # Get shares outstanding and market cap
+        ticker_details = POLYGON_REFERENCE_CLIENT.get_ticker_details(self.ticker)['results']  #? This will pull date from most recent available date -- it could be outdated
+        self.weighted_shares_outstanding = ticker_details.get('weighted_shares_outstanding', 0)
+        self.mkt_cap = self.weighted_shares_outstanding * self.price
 
     def generate_alert_lines(self):
         """Generate HTML string for email alerts
         :return:
         """
         alert_lines = []
-
-        # Float
-        if self.flt > 1_000_000:
-            flt = two_decimal(self.flt, commas=True, append='M', factor=1 / 1_000_000)
-        else:
-            flt = two_decimal(self.flt, commas=True, append='K', factor=1 / 1_000)
 
         # Add company data
         alert_lines += [
@@ -74,7 +96,7 @@ class Company:
             # ('data', 'Float', flt),
             ('data', 'Price', two_decimal(self.price, prepend='$')),
             ('data', 'Volume', two_decimal(self.volume, commas=True, decimals=0)),
-            ('data', 'Dollar Change', two_decimal(self.amount_chg, prepend='+')),
+            ('data', 'Day Change ($)', two_decimal(self.amount_chg, prepend='+')),
             ('data', 'Percent Change', two_decimal(self.percent_chg, prepend='+', append='%'))
         ]
 
@@ -85,9 +107,9 @@ class Company:
     def generate_telegram_alert_text(self):
         return f"""
 <b>${self.ticker}</b> - {self.name}
-<b>Market Cap:</b> {two_decimal(self.mkt_cap, decimals=0, commas=True, prepend='$', append='M', factor=1 / 1_000_000)}
-<b>Price:</b> {two_decimal(self.price, prepend='$')}
-<b>Volume:</b> {two_decimal(self.volume, commas=True, decimals=0)}
+<b>Market Cap:</b> {two_decimal(self.mkt_cap, decimals=0, commas=True, prepend='$', append='M', factor=1 / 1_000_000, non_zero=True)}
+<b>Price:</b> {two_decimal(self.price, prepend='$', non_zero=True)}
+<b>Volume:</b> {two_decimal(self.volume, commas=True, decimals=0, non_zero=True)}
 <b>Dollar Change:</b> {two_decimal(self.amount_chg, prepend='+')}
 <b>Percent Change:</b> {two_decimal(self.percent_chg, prepend='+', append='%', factor=100)}
 """
@@ -104,6 +126,9 @@ class Article:
         self.url = article_json['url']
         self.created = datetime.strptime(article_json['created'], '%a, %d %b %Y %H:%M:%S %z')
 
+        # Things that are not directly from the Benzinga JSON
+        self.body_text = html_to_text(self.body)
+
     def __repr__(self):
         return f"""Created: {self.created}
 ID: {self.id}
@@ -117,10 +142,11 @@ class Alert:
     def __init__(self, article: Article):
         self.article = article
         self.companies = []
-        self.summary = ""
-        self.category = ""
+        self.summary = "N/A"    # Default value in case OpenAI errors
+        self.category = "N/A"    # Default value in case OpenAI errors
         self.html_alert = ""
         self.telegram_alert = ""
+        self.alert_start_time = datetime.now()
 
         # Run methods so that the alert is ready to be delivered  #? Thread these so polygon and OpenAI can work at same time, or look into polygon's async functionality
         self.load_companies()
@@ -133,8 +159,17 @@ class Alert:
         """
         assert len(self.companies) == 0    # load_companies() should only be called once in the life of an alert
 
+        cik_list = []    # List that contains all the company CIKs
+
         for ticker in self.article.tickers:
             company = Company(ticker)
+
+            # If one of the companies in the ticker list has the same CIK as this ticker, skip this ticker
+            if company.cik in cik_list:
+                continue
+            else:
+                cik_list.append(company.cik)
+
             company.update_financials()
             self.companies.append(company)
 
@@ -142,21 +177,23 @@ class Alert:
 
         # For now we are just asking gpt-3.5-turbo Davinci to summarize this article, no fine tuning and no special prompts
         #? Try to get it to stop saying "This press release blah blah" and just be more direct
-        #? Benzinga gives HTML articles, so we should probably preprocess before feeding into the model. This should be done in the Article class though.
+        #? We should count the number of tokens in our prompt. The input + ouptut can't exceed 4096.
+        #? Retry if error? currently if there's an error summary will be N/A
+        #? GPT should be strict when picking categories, if it doesnt fit perfectly then make it Other
 
         try:
             completion = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "You are given press releases and you must respond with a category from this list (Drug Approval, Drug Rejection, Clinical Trial, Merger/Acquisition, Earnings, N/A) and a summary of the press release that is somewhat short and contains market related info. Keep the summary under 6 sentences."},  # clues for GPT: "somewhat short" - "market related info" -
+                    {"role": "system", "content": "You are given press releases and you must respond with a category from this list (Drug Approval, Drug Rejection, Clinical Trial, Merger/Acquisition, Stock Split, Funding, Staff Update, Earnings, Legal, Other) and a summary of the press release that is somewhat short and contains market related info. Keep the summary under 6 sentences."},  # clues for GPT: "somewhat short" - "market related info" -
                     {"role": "system", "content": "The first line of your response should be just the category and the second line should be just the summary"},
-                    {"role": "user", "content": self.article.headline + '\n' + self.article.body}
+                    {"role": "user", "content": self.article.headline + '\n' + self.article.body_text}
                 ],
                 temperature=0.3
             )
         except:
             print_exc()
-            self.generate_alert_text()
+            # self.generate_summary_category()    # This will make it try forever until it succeeds
             return None
 
         response_str = completion['choices'][0]['message']['content']
@@ -210,6 +247,7 @@ f"""<b>❗{self.category}❗</b>
 
         # print(self.html_alert)
         # print()
+        print(f"Alert processing time: {datetime.now() - self.alert_start_time}")
         print(self.telegram_alert)
 
         telegram_message_to_groups(self.telegram_alert, tg_channels)
