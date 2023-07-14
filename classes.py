@@ -180,12 +180,15 @@ class Alert:
         #? We should count the number of tokens in our prompt. The input + ouptut can't exceed 4096.
         #? Retry if error? currently if there's an error summary will be N/A
         #? GPT should be strict when picking categories, if it doesnt fit perfectly then make it Other
+        #? Sometimes the tickers that Benzinga includes in the release have nothing to do with the main news, they are just found somewhere in the article. we should ask gpt to check this
+
+        # Other possible categories: Funding, Staff Update, Earnings, Legal
 
         try:
             completion = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "You are given press releases and you must respond with a category from this list (Drug Approval, Drug Rejection, Clinical Trial, Merger/Acquisition, Stock Split, Funding, Staff Update, Earnings, Legal, Other) and a summary of the press release that is somewhat short and contains market related info. Keep the summary under 6 sentences."},  # clues for GPT: "somewhat short" - "market related info" -
+                    {"role": "system", "content": f"You are given press releases and you must respond with a category from this list ({', '.join(ALERT_CATEGORIES)}, Other) and a summary of the press release that is somewhat short and contains market related info. Keep the summary under 6 sentences. Be very strict when selecting the category, if the news isn't a perfect example of any of the categories then label it as Other. For example, an announcement about the fairness of a Merger is \"Other\", and any news about a Clinical Trial is \"Other\" unless it is specifically a Clinical Trial Result."},  # clues for GPT: "somewhat short" - "market related info" -
                     {"role": "system", "content": "The first line of your response should be just the category and the second line should be just the summary"},
                     {"role": "user", "content": self.article.headline + '\n' + self.article.body_text}
                 ],
@@ -193,6 +196,7 @@ class Alert:
             )
         except:
             print_exc()
+            logging.exception("")
             # self.generate_summary_category()    # This will make it try forever until it succeeds
             return None
 
@@ -247,8 +251,8 @@ f"""<b>❗{self.category}❗</b>
 
         # print(self.html_alert)
         # print()
-        print(f"Alert processing time: {datetime.now() - self.alert_start_time}")
-        print(self.telegram_alert)
+        INFO_LOGGER.info(f"Alert processing time: {datetime.now() - self.alert_start_time}")
+        logging.info(self.telegram_alert)
 
         telegram_message_to_groups(self.telegram_alert, tg_channels)
 
