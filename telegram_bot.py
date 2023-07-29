@@ -11,7 +11,8 @@ def send_telegram_message(bot, message, chat_id, disable_link_preview=True):
     for _ in range(3):
         try:
             bot.send_message(chat_id=chat_id, text=message,
-                             parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=disable_link_preview)
+                             parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=disable_link_preview,
+                             timeout=15)  # timeout is the amount of time this function will wait for Telegrams reply confirming the sent message, before throwing an exception
             break  # If successful
         except Exception:
             print_exc()
