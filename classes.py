@@ -52,10 +52,10 @@ class Company:
         snapshot_today = snapshot['day']
         snapshot_yesterday = snapshot['prevDay']
 
-        # On market day mornings, today's close is 0 because trading hasn't started yet
-        # In this case we should use the previous day's close as the current price, and have change values equal zero
+        # On market day mornings, today's close is 0 because trading hasn't started yet. In this case we should use the previous day's close as the current price, and have change values equal zero
+        # Also if polygons stock price today is 0 but yesterday is not 0, it may just not have been updated today so use yesterday's
         #? If the price is 0 because of a polygon error, and it is before 9:30AM on a weekend, this logic would trigger, but it shouldn't
-        if snapshot_today['c'] == 0 and datetime.now().time() < time(9, 30):
+        if (snapshot_today['c'] == 0 and datetime.now().time() < time(9, 30)) or (snapshot_today['c'] == 0 and snapshot_yesterday['c'] != 0):
             snapshot_today = snapshot_yesterday
 
         # Don't use 'todaysChange' or 'todaysChangePerc' since they include pre/post market changes
@@ -110,8 +110,7 @@ class Company:
 <b>Market Cap:</b> {two_decimal(self.mkt_cap, decimals=0, commas=True, prepend='$', append='M', factor=1 / 1_000_000, non_zero=True)}
 <b>Price:</b> {two_decimal(self.price, prepend='$', non_zero=True)}
 <b>Volume:</b> {two_decimal(self.volume, commas=True, decimals=0, non_zero=True)}
-<b>Dollar Change:</b> {two_decimal(self.amount_chg, prepend='+')}
-<b>Percent Change:</b> {two_decimal(self.percent_chg, prepend='+', append='%', factor=100)}
+<b>Day Change:</b> {two_decimal(self.amount_chg, prepend='+')} ({two_decimal(abs(self.percent_chg), append='%', factor=100)})
 """
 
 
@@ -134,8 +133,7 @@ class Article:
 ID: {self.id}
 URL: {self.url}
 Headline: {self.headline}
-Tickers: {self.tickers}
-Body: {self.body}"""
+Tickers: {self.tickers}"""
 
 
 class Alert:
@@ -148,7 +146,7 @@ class Alert:
         self.telegram_alert = ""
         self.alert_start_time = datetime.now()
 
-        # Run methods so that the alert is ready to be delivered  #? Thread these so polygon and OpenAI can work at same time, or look into polygon's async functionality
+        # Run methods so that the alert is ready to be delivered after initializing it #? Thread these so polygon and OpenAI can work at same time, or look into polygon's async functionality
         self.load_companies()
         self.generate_summary_category()
         self.generate_alert_text()
@@ -188,7 +186,7 @@ class Alert:
             completion = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": f"You are given press releases and you must respond with a category from this list ({', '.join(ALERT_CATEGORIES)}, Other) and a summary of the press release that is somewhat short and contains market related info. Keep the summary under 6 sentences. Be very strict when selecting the category, if the news isn't a perfect example of any of the categories then label it as Other. For example, an announcement about the fairness of a Merger is \"Other\", and any news about a Clinical Trial is \"Other\" unless it is specifically a Clinical Trial Result."},  # clues for GPT: "somewhat short" - "market related info" -
+                    {"role": "system", "content": GPT_PROMPT},  # clues for GPT: "somewhat short" - "market related info" -
                     {"role": "system", "content": "The first line of your response should be just the category and the second line should be just the summary"},
                     {"role": "user", "content": self.article.headline + '\n' + self.article.body_text}
                 ],
@@ -209,6 +207,23 @@ class Alert:
         # print(self.category)
         # print(self.summary)
         # print()
+
+    def is_valid(self):
+        """Ensure the Alert is valid and worth sending.
+        This method should be run after the alert is ready, before sending.
+        This function may also change some properties of the alert so that it is ready to be sent
+        :return: True if article should be sent, otherwise False
+        """
+        # Check that the companies included in the alert are actually a major part of the news, not companies just mentioned at the end of the release
+
+        # If GPT classified it as a clinical trial result, make sure its actually a result
+        if self.category == 'Clinical Trial Result':
+            if any(keyword.lower() in self.article.headline.lower() for keyword in ANTI_CLINICAL_TRIAL_KEYWORDS):
+                self.category = "Other"
+            else:
+                pass  # Alert is categorized correctly
+
+        return True
 
     def generate_alert_text(self):
         alert_lines = [

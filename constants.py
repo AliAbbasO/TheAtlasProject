@@ -2,6 +2,9 @@ import config
 from polygon import ReferenceClient, StocksClient
 import requests
 import logging
+from benzinga import news_data
+
+BENZINGA_NEWS = news_data.News(config.benzinga_key)
 
 POLYGON_REFERENCE_CLIENT = ReferenceClient(config.polygon_key)
 POLYGON_STOCKS_CLIENT = StocksClient(config.polygon_key)
@@ -19,7 +22,17 @@ HEADLINE_KEYWORDS = [
     'acquisition', 'acquire', 'merge', 'combine', 'combination', 'sell', 'join',    # Merger/Acquisition
     # 'stock split',    # Stock Split
 
+    # 'a'    # For testing (to match all headlines)
 ]
+
+ANTI_CLINICAL_TRIAL_KEYWORDS = [
+    'enroll', 'initiate', 'initiation', 'initial', 'authorization', 'expand', 'to conduct', 'first patient',
+    'first subject', 'last patient', 'last subject', 'starts phase', 'starts study'
+    'pre-clinical', 'readouts', 'interim analysis', 'interim data analysis', 'update',
+]
+
+# Main prompt given to GPT to generate a summary and category
+GPT_PROMPT = f"You are given press releases and you must respond with a category from this list ({', '.join(ALERT_CATEGORIES)}, Other) and a summary of the press release that is somewhat short and contains market related info. Keep the summary under 5 sentences.\nBy default, all press releases should be categorized as other, unless the press release matches perfectly with one of the categories. Any announcements RELATING to an approval, rejection, merger, etc should be classified as \"Other\". Only very obvious announcements OF these categories should be categorized as such."
 
 # ---Logging---
 # log.log will contain everything logged (above the logging level) in the most recent run of the program
