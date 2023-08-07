@@ -9,13 +9,36 @@ BENZINGA_NEWS = news_data.News(config.benzinga_key)
 POLYGON_REFERENCE_CLIENT = ReferenceClient(config.polygon_key)
 POLYGON_STOCKS_CLIENT = StocksClient(config.polygon_key)
 
+
+class CATEGORIES:
+    FDA_APPROVAL = 'FDA Drug Approval'
+    FDA_REJECTION = 'FDA Drug Rejection'
+    CLINICAL_TRIAL = 'Clinical Trial Result'
+    MERGER_ACQUISITION = 'Merger/Acquisition'
+    ASSET_ACQUISITION = 'Asset Acquisition'   # So that asset acquisitions aren't alerted as MnA
+    LEGAL = 'Legal'   # Just to stop GPT from using the main categories
+    OTHER = 'Other'
+    ALL = [
+        FDA_APPROVAL, FDA_REJECTION, CLINICAL_TRIAL, MERGER_ACQUISITION, LEGAL, OTHER
+    ]
+    PROD = [
+        FDA_APPROVAL, FDA_REJECTION, CLINICAL_TRIAL, MERGER_ACQUISITION
+    ]
+
+
 # ---Important Constants---
-ALERT_CATEGORIES = [
-    'FDA Drug Approval', 'FDA Drug Rejection', 'Clinical Trial Result', 'Merger/Acquisition'
-]
 
 # At least one of these keywords must be in the article headline for us to even process it. Case-insensitive
 HEADLINE_KEYWORDS = [
+    'fda authorization', 'fda approves', 'fda approval',    # FDA Drug Approval
+    'complete response letter',    # FDA Drug Rejection
+    'phase', 'clinical trial', 'trial results', 'study'    # Clinical Trial
+    'acquisition', 'acquire', 'merge', 'combine', 'combination', 'sell', 'join',    # Merger/Acquisition
+    # 'stock split',    # Stock Split
+
+    # 'a'    # For testing (to match all headlines)
+]
+LAX_HEADLINE_KEYWORDS = [  # Matches all possible alerts - not currently in use
     'fda authorization', 'approves', 'approval',    # FDA Drug Approval
     'complete response letter',    # FDA Drug Rejection
     'phase', 'clinical trial', 'trial results', 'study'    # Clinical Trial
@@ -25,14 +48,28 @@ HEADLINE_KEYWORDS = [
     # 'a'    # For testing (to match all headlines)
 ]
 
-ANTI_CLINICAL_TRIAL_KEYWORDS = [
-    'enroll', 'initiate', 'initiation', 'initial', 'authorization', 'expand', 'to conduct', 'first patient',
-    'first subject', 'last patient', 'last subject', 'starts phase', 'starts study'
-    'pre-clinical', 'readouts', 'interim analysis', 'interim data analysis', 'update',
-]
+ANTI_KEYWORDS = {
+    CATEGORIES.FDA_APPROVAL: [
+        'initiate', 'initiation', 'phase 1', 'phase 2', 'clinical trial', 'clinical hold', 'clearance'
+    ],
+    CATEGORIES.FDA_REJECTION: [
+
+    ],
+    CATEGORIES.CLINICAL_TRIAL: [
+        'enroll', 'initiate', 'initiation', 'initial', 'authorization', 'expand', 'to conduct', 'first patient',
+        'first subject', 'last patient', 'last subject', 'starts phase', 'starts study', 'clearance'
+        'pre-clinical', 'preclinical', 'readout', 'interim analysis', 'interim data analysis', 'update',
+        'resumption', 'resume', 'launch',
+        'preliminary', 'completion of dosing', 'completes production', 'trial design', 'completion of dose',
+        'completes dosing', 'proceed',
+    ],
+    CATEGORIES.MERGER_ACQUISITION: [
+        'joint venture', 'term sheet'
+    ],
+}
 
 # Main prompt given to GPT to generate a summary and category
-GPT_PROMPT = f"You are given press releases and you must respond with a category from this list ({', '.join(ALERT_CATEGORIES)}, Other) and a summary of the press release that is somewhat short and contains market related info. Keep the summary under 5 sentences.\nBy default, all press releases should be categorized as other, unless the press release matches perfectly with one of the categories. Any announcements RELATING to an approval, rejection, merger, etc should be classified as \"Other\". Only very obvious announcements OF these categories should be categorized as such."
+GPT_PROMPT = f"You are given press releases and you must respond with a category from this list ({', '.join(CATEGORIES.ALL)}) and a summary of the press release that is somewhat short and contains market related info. Keep the summary under 5 sentences."
 
 # ---Logging---
 # log.log will contain everything logged (above the logging level) in the most recent run of the program

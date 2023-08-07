@@ -1,0 +1,6 @@
+requests
+beautifulsoup4
+python-telegram-bot==13.8.1
+openai
+benzinga
+polygon
