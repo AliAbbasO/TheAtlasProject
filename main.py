@@ -106,24 +106,27 @@ def preprocess_article(article, headline_keywords=HEADLINE_KEYWORDS):
     return article
 
 
-def process_article(article):
+def process_article(article, deliver=True):
     # Create the alert object. Everything needed for the alert is done in the __init__ function of Alert class.
     alert = Alert(article)
+    alert.post_process()
 
     # Ensure the alert is valid before sending it
     if not alert.is_valid():
         INFO_LOGGER.info("Alert is not valid!")
         return
+    else:
+        INFO_LOGGER.info("Alert is valid!")
 
-    # Send to production channels if alert category is in the list of prod alerts, else just send to dev channels
-    if alert.category in ALERT_CATEGORIES:
+    if alert.category in CATEGORIES.PROD:
         telegram_channels = config.telegram_channels_prod
     else:
         telegram_channels = config.telegram_channels_dev
 
-    alert.deliver(telegram_channels)
+    if deliver:
+        alert.deliver(telegram_channels)
 
-    logging.info(f"NEW ALERT! | Article Time: {article.created} | Article Link: {article.url}")
+    logging.info(f"NEW ALERT! | Article Time: {alert.article.created} | Article Link: {alert.article.url}")
 
 
 if __name__ == '__main__':

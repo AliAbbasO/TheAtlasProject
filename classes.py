@@ -187,7 +187,7 @@ class Alert:
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": GPT_PROMPT},  # clues for GPT: "somewhat short" - "market related info" -
-                    {"role": "system", "content": "The first line of your response should be just the category and the second line should be just the summary"},
+                    {"role": "system", "content": "Your response should just be \"Category\\nSummary\". Nothing else."},
                     {"role": "user", "content": self.article.headline + '\n' + self.article.body_text}
                 ],
                 temperature=0.3
@@ -208,20 +208,26 @@ class Alert:
         # print(self.summary)
         # print()
 
+    def post_process(self):
+        # If GPT generated a category, check against the respective ANTI_KEYWORD list to confirm, otherwise set to Other
+        if any(keyword.lower() in self.article.headline.lower() for keyword in ANTI_KEYWORDS.get(self.category, [])):
+            self.category = CATEGORIES.OTHER
+            INFO_LOGGER.info(f"Alert is NOT a {self.category}: {self.article.headline}")
+        else:
+            INFO_LOGGER.info(f"Alert IS a {self.category}: {self.article.headline}")
+            pass  # Alert is categorized correctly
+
     def is_valid(self):
         """Ensure the Alert is valid and worth sending.
         This method should be run after the alert is ready, before sending.
         This function may also change some properties of the alert so that it is ready to be sent
         :return: True if article should be sent, otherwise False
         """
-        # Check that the companies included in the alert are actually a major part of the news, not companies just mentioned at the end of the release
+        # Make sure the category is one of the possible options.
+        if self.category not in CATEGORIES.ALL:
+            return False
 
-        # If GPT classified it as a clinical trial result, make sure its actually a result
-        if self.category == 'Clinical Trial Result':
-            if any(keyword.lower() in self.article.headline.lower() for keyword in ANTI_CLINICAL_TRIAL_KEYWORDS):
-                self.category = "Other"
-            else:
-                pass  # Alert is categorized correctly
+        # Check that the companies included in the alert are actually a major part of the news, not companies just mentioned at the end of the release
 
         return True
 
