@@ -109,7 +109,6 @@ def preprocess_article(article, headline_keywords=HEADLINE_KEYWORDS):
 def process_article(article, deliver=True):
     # Create the alert object. Everything needed for the alert is done in the __init__ function of Alert class.
     alert = Alert(article)
-    alert.post_process()
 
     # Ensure the alert is valid before sending it
     if not alert.is_valid():
