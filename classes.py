@@ -149,6 +149,7 @@ class Alert:
         # Run methods so that the alert is ready to be delivered after initializing it #? Thread these so polygon and OpenAI can work at same time, or look into polygon's async functionality
         self.load_companies()
         self.generate_summary_category()
+        self.post_process()
         self.generate_alert_text()
 
     def load_companies(self):
@@ -204,18 +205,16 @@ class Alert:
         self.category = response_list[0].strip()
         self.summary = response_list[1].strip() if response_list[1] else response_list[2].strip()
 
-        # print(self.category)
-        # print(self.summary)
-        # print()
-
-    def post_process(self):
-        # If GPT generated a category, check against the respective ANTI_KEYWORD list to confirm, otherwise set to Other
+        # Confirm the category generated or change to OTHER
         if any(keyword.lower() in self.article.headline.lower() for keyword in ANTI_KEYWORDS.get(self.category, [])):
-            self.category = CATEGORIES.OTHER
             INFO_LOGGER.info(f"Alert is NOT a {self.category}: {self.article.headline}")
+            self.category = CATEGORIES.OTHER
         else:
             INFO_LOGGER.info(f"Alert IS a {self.category}: {self.article.headline}")
             pass  # Alert is categorized correctly
+
+    def post_process(self):
+        pass
 
     def is_valid(self):
         """Ensure the Alert is valid and worth sending.
