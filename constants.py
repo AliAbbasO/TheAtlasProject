@@ -50,18 +50,19 @@ LAX_HEADLINE_KEYWORDS = [  # Matches all possible alerts - not currently in use
 
 ANTI_KEYWORDS = {
     CATEGORIES.FDA_APPROVAL: [
-        'initiate', 'initiation', 'phase 1', 'phase 2', 'clinical trial', 'clinical hold', 'clearance'
+        'initiate', 'initiation', 'phase 1', 'phase 2', 'clinical trial', 'clinical hold', 'clearance',
+        'phase'
     ],
     CATEGORIES.FDA_REJECTION: [
 
     ],
     CATEGORIES.CLINICAL_TRIAL: [
         'enroll', 'initiate', 'initiation', 'initial', 'authorization', 'expand', 'to conduct', 'first patient',
-        'first subject', 'last patient', 'last subject', 'starts phase', 'starts study', 'clearance'
-        'pre-clinical', 'preclinical', 'readout', 'interim analysis', 'interim data analysis', 'update',
-        'resumption', 'resume', 'launch',
+        'first subject', 'last patient', 'last subject', 'starts phase', 'starts study', 'clearance',
+        'pre-clinical', 'preclinical', 'readout', 'interim', 'update',
+        'resumption', 'resume', 'launch', 'ongoing', 'dose'
         'preliminary', 'completion of dosing', 'completes production', 'trial design', 'completion of dose',
-        'completes dosing', 'proceed',
+        'completes dosing', 'proceed'
     ],
     CATEGORIES.MERGER_ACQUISITION: [
         'joint venture', 'term sheet'
