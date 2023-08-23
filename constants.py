@@ -15,12 +15,11 @@ class CATEGORIES:
     FDA_REJECTION = 'FDA Drug Rejection'
     CLINICAL_TRIAL = 'Clinical Trial Result'
     MERGER_ACQUISITION = 'Merger/Acquisition'
-    ASSET_ACQUISITION = 'Asset Acquisition'   # So that asset acquisitions aren't alerted as MnA
     LEGAL = 'Legal'   # Just to stop GPT from using the main categories
     STAFF_UPDATE = 'Staff Update'   # Just to stop GPT from using the main categories
     OTHER = 'Other'
     ALL = [
-        FDA_APPROVAL, FDA_REJECTION, CLINICAL_TRIAL, MERGER_ACQUISITION, ASSET_ACQUISITION, LEGAL, STAFF_UPDATE, OTHER
+        FDA_APPROVAL, FDA_REJECTION, CLINICAL_TRIAL, MERGER_ACQUISITION, LEGAL, STAFF_UPDATE, OTHER
     ]
     PROD = [
         FDA_APPROVAL, FDA_REJECTION, CLINICAL_TRIAL, MERGER_ACQUISITION
@@ -63,10 +62,11 @@ ANTI_KEYWORDS = {
         'pre-clinical', 'preclinical', 'readout', 'interim', 'update',
         'resumption', 'resume', 'launch', 'ongoing', 'dose',
         'preliminary', 'completion of dosing', 'completes production', 'trial design', 'completion of dose',
-        'completes dosing', 'proceed', 'register', 'prepare', 'progress'
+        'completes dosing', 'proceed', 'register', 'prepare', 'progress', 'continue'
     ],
     CATEGORIES.MERGER_ACQUISITION: [
-        'joint venture', 'term sheet'
+        'joint venture', 'term sheet', 'asset', 'property', 'portfolio', 'extension', 'extend', 'deadline',
+        'vote', 'terminate'
     ],
 }
 
